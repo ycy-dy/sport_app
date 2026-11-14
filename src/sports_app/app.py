@@ -3,7 +3,7 @@ from flask import Flask, g, jsonify, request
 from .auth import require
 
 
-def create_app(*, data_dir: str, principal_loader, task_runtime=None) -> Flask:
+def create_app(*, data_dir: str, principal_loader, task_runtime=None, publication_chain=None) -> Flask:
     app = Flask(__name__)
     app.config.update(DATA_DIR=data_dir, PRINCIPAL_LOADER=principal_loader)
 
@@ -21,12 +21,7 @@ def create_app(*, data_dir: str, principal_loader, task_runtime=None) -> Flask:
     from .task_http import register_task_http
     register_task_http(app, task_runtime)
 
-    @app.post("/api/publications/<draft_id>/confirm")
-    def confirm(draft_id: str):
-        try:
-            require(g.principal, {"admin"}, request.headers.get("X-CSRF"))
-        except PermissionError as exc:
-            return jsonify(category="HARD_BLOCK", code="FORBIDDEN", message=str(exc)), 403
-        return jsonify(category="EXECUTION_FAILURE", code="NOT_IMPLEMENTED", message="发布事务尚未接线", draft_id=draft_id), 501
+    from .publication_http import register_publication_http
+    register_publication_http(app, publication_chain)
 
     return app
