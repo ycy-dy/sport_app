@@ -136,11 +136,15 @@ def register_publication_http(app,chain):
 
     def view(row):
         original=json.loads(row['original_json'])
-        return {'publication_id':row['publication_id'],'status':row['status'],'slot_key':row['slot_key'],
+        value={'publication_id':row['publication_id'],'status':row['status'],'slot_key':row['slot_key'],
                 'created_at':row['created_at'],'selection_hash':row['selection_hash'],
                 'manifest_hash':row['manifest_hash'],'settlement_ticket':original.get('settlement_ticket'),
                 'recommendation_status':original.get('recommendation_status'),
                 'assessment_summary':original.get('assessment_summary'), 'model_probability':None,'EV':None}
+        if g.principal.role=='viewer':
+            from .public_projection import viewer_manifest
+            value.update(viewer_manifest(row['manifest_hash']))
+        return value
 
     @bp.get('/api/publications')
     def ledger():

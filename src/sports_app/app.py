@@ -3,7 +3,7 @@ from flask import Flask, g, jsonify, request
 from .auth import require
 
 
-def create_app(*, data_dir: str, principal_loader, task_runtime=None, publication_chain=None) -> Flask:
+def create_app(*, data_dir: str, principal_loader, task_runtime=None, publication_chain=None, read_views=None) -> Flask:
     app = Flask(__name__)
     app.config.update(DATA_DIR=data_dir, PRINCIPAL_LOADER=principal_loader)
 
@@ -23,5 +23,8 @@ def create_app(*, data_dir: str, principal_loader, task_runtime=None, publicatio
 
     from .publication_http import register_publication_http
     register_publication_http(app, publication_chain)
+
+    from .read_api import register_read_api
+    register_read_api(app, read_views)
 
     return app
