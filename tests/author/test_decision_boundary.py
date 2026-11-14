@@ -3,6 +3,7 @@ from copy import deepcopy
 import pytest
 from sports_app.pair_policy import periods
 from sports_app.publication import fingerprint
+from review_fixture import add_coverage,attach_reviews
 from test_pair_policy import batch, setup, ADMIN
 
 
@@ -25,6 +26,7 @@ def test_basketball_cross_midnight_not_cross_period(setup):
         option=value['options'][f'o{i+1}'];option['market']='MNL'
         market=value['markets'][f'o{i+1}'];market['market']='MNL';market['outcomes']={'H':'3','A':'3'}
     value['candidates']['pair1']['period']='early'
+    add_coverage(value)
     policy.freeze_batch(ADMIN,'a','b',value)
     with pytest.raises(ValueError):policy.build('b','pair1')
 
@@ -48,9 +50,10 @@ def test_synthetic_record_validates_boundary_but_default_loader_refuses(setup):
     _,policy=setup;value=batch()
     for key in ('o1','o2'):
         value['options'][key+'alternative']=dict(value['options'][key],option_id=key+'alternative',selection='D')
+    add_coverage(value)
     policy.freeze_batch(ADMIN,'a','b',value)
     with pytest.raises(ValueError):policy.final_snapshot('b','pair1','synthetic-execution')
-    execution=record(policy,value)
+    execution=attach_reviews(policy,record(policy,value),'b')
     policy.decision_loader=lambda key:deepcopy(execution)
     final=policy.final_snapshot('b','pair1','synthetic-execution')
     assert policy(final)
@@ -63,8 +66,9 @@ def test_unbound_or_incomplete_execution_rejected(setup,mutation):
     _,policy=setup;value=batch()
     for key in ('o1','o2'):
         value['options'][key+'alternative']=dict(value['options'][key],option_id=key+'alternative',selection='D')
+    add_coverage(value)
     policy.freeze_batch(ADMIN,'a','b',value)
-    execution=record(policy,value)
+    execution=attach_reviews(policy,record(policy,value),'b')
     if mutation=='response':execution['raw_response']='changed'
     elif mutation=='binding':execution['batch_hash']='other'
     elif mutation=='comparison':execution['option_comparisons']={}

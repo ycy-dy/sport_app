@@ -6,6 +6,7 @@ import pytest
 from test_pair_policy import setup,batch,ADMIN,REVIEWER,AT
 from sports_app.evidence import Claim,WEIGHTS
 from sports_app.publication import fingerprint
+from review_fixture import add_coverage,attach_reviews
 
 
 def prepare(policy,evidence):
@@ -29,6 +30,7 @@ def prepare(policy,evidence):
         base['dimensions']=[(f'{i:02d}','verified') for i in range(1,24)]
     value['candidates']['B']={'option_ids':['o1low','o2low'],'period':'early_middle','equal_stake':'1','total_investment':'1'}
     value['candidates']['C']={'option_ids':['o1','o2low'],'period':'early_middle','equal_stake':'1','total_investment':'1'}
+    add_coverage(value)
     policy.freeze_batch(ADMIN,'a','b',value)
     digest=policy.freeze_agent_input(ADMIN,'a',input_id='input',batch_id='b',assembled_input={'synthetic':'input'})
     record={'provider':'codex','status':'completed','execution_id':'execution','batch_hash':fingerprint(value),
@@ -44,6 +46,7 @@ def prepare(policy,evidence):
 def test_qualified_vetoed_then_conditional_rebuilt_without_score_changes(setup):
     evidence,policy=setup;_,record=prepare(policy,evidence)
     record['candidate_vetoes']={'pair1':{'option_ids':['o1'],'reason':'sourced risk','claim_ids':['o1claim1']}}
+    attach_reviews(policy,record,'b')
     policy.decision_loader=lambda key:deepcopy(record)
     final=policy.final_snapshot('b','B','execution')
     assert final['recommendation_status']=='conditional_low_confidence'
@@ -54,9 +57,17 @@ def test_qualified_vetoed_then_conditional_rebuilt_without_score_changes(setup):
 
 def test_qualified_not_vetoed_blocks_conditionals_and_option_reuse(setup):
     evidence,policy=setup;_,record=prepare(policy,evidence)
+    attach_reviews(policy,record,'b')
     policy.decision_loader=lambda key:deepcopy(record)
     with pytest.raises(ValueError):policy.final_snapshot('b','B','execution')
     record['candidate_vetoes']={'pair1':{'option_ids':['o1'],'reason':'sourced risk','claim_ids':['o1claim1']}}
+    # Preserve existing comparison reviews; create only the new scoped risk receipt.
+    from sports_app.decision_review import DecisionReviewRepository
+    repo=policy.review_repository
+    repo.save(REVIEWER,'r',review_id='reuse-risk',batch_id='b',kind='risk',scope=['o1'],
+              source_quotes={'o1':{'o1claim1':sha256('synthetic risk fact'.encode()).hexdigest()}},
+              rationale='synthetic scope risk',valid_until=(AT+timedelta(minutes=30)).isoformat())
+    record['candidate_vetoes']['pair1']['review_id']='reuse-risk'
     record['selected_candidate_id']='C'
     with pytest.raises(ValueError):policy.final_snapshot('b','C','execution')
 

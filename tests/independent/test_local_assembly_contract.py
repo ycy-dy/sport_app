@@ -81,15 +81,19 @@ def build_chain(case,missing_comparison=False,null_line=False):
         option['evidence_as_of']=AT.isoformat();option['settlement_scope']=option['scope']
         alternative=deepcopy(option);alternative.update(option_id=key+'alt',assessment_id=key+'alt-assessment',selection='D')
         value['options'][key+'alt']=alternative
+    from independent_decision_review_fixture import add_coverage
+    add_coverage(value)
     repo=EvidenceRepository(SQLiteStore(temp/'database',app_root=root),clock=lambda:AT)
     policy=RegularPairPolicy(repo,approved_manifest=approved)
     policy.freeze_batch(ADMIN,'a','batch',value)
     seen=[]
     def fake(body):
         seen.append(deepcopy(body))
-        return dict(raw_response='synthetic decision, not AI',selected_candidate_id='pair',candidate_vetoes={},
+        response = dict(raw_response='synthetic decision, not AI',selected_candidate_id='pair',candidate_vetoes={},
             option_comparisons={} if missing_comparison else {key:dict(selected_option_id=key,market_version='mv',
                 alternative_option_ids=[key+'alt'],rationale='synthetic comparison',server_comparison_verified=True) for key in ('o1','o2')})
+        from independent_decision_review_fixture import attach_reviews
+        return attach_reviews(policy,response)
     runtime=ManualRuntime(policy,executor=fake,clock=lambda:AT,assembly=assembly)
     assembly.register(runtime,ADMIN,'a',registry_id='temporary-test-approval')
     runtime.create(ADMIN,'a',task_id='task',input_id='input',registry_id='temporary-test-approval',batch_id='batch',

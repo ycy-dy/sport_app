@@ -15,6 +15,7 @@ from sports_app.publication import PublicationService
 from sports_app.published_settlement import PublishedSettlementService
 from sports_app.settlement import ResultSnapshot,Identity
 from sports_app.agent_input import REQUIRED_OPTION_FIELDS
+from review_fixture import add_coverage,attach_reviews
 
 APP=Path(__file__).resolve().parents[2]
 POLICY=APP.parent/'foot'
@@ -36,6 +37,7 @@ def value_for(version):
         option['evidence_as_of']=AT.isoformat();option['settlement_scope']=option['scope']
         other=deepcopy(option);other.update(option_id=key+'alt',assessment_id=key+'alt-assessment',selection='D')
         value['options'][key+'alt']=other
+    add_coverage(value)
     return value
 
 
@@ -59,7 +61,14 @@ def response():
 
 def runtime_for(chain,fake):
     evidence,policy,assembly=chain
-    runtime=ManualRuntime(policy,executor=fake,clock=lambda:AT,assembly=assembly)
+    # Review records exist before execution; never mutate immutable response afterward.
+    reviewed=attach_reviews(policy,response(),'batch')
+    def with_reviews(body):
+        returned=fake(body)
+        if returned.get('option_comparisons'):
+            returned['option_comparisons']=deepcopy(reviewed['option_comparisons'])
+        return returned
+    runtime=ManualRuntime(policy,executor=with_reviews,clock=lambda:AT,assembly=assembly)
     assembly.register(runtime,ADMIN,'a',registry_id='actual-rules-test-approval')
     runtime.create(ADMIN,'a',task_id='task',input_id='input',registry_id='actual-rules-test-approval',
                    batch_id='batch',deadline=(AT+timedelta(minutes=5)).isoformat())

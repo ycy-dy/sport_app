@@ -116,9 +116,10 @@ def market_probability(option, batch, at):
 
 
 class RegularPairPolicy:
-    def __init__(self, evidence_repository, *, approved_manifest, decision_loader=None):
+    def __init__(self, evidence_repository, *, approved_manifest, decision_loader=None, review_repository=None):
         self.evidence = evidence_repository
         self.decision_loader = decision_loader  # authenticated server runtime record lookup only
+        self.review_repository = review_repository
         self.store = evidence_repository.store
         self.approved_manifest = json.loads(canonical(approved_manifest))
         if (approved_manifest.get('runtime_provider')!='codex'
@@ -329,6 +330,10 @@ CREATE TRIGGER IF NOT EXISTS agent_input_no_delete BEFORE DELETE ON agent_input_
                 linked=[available[key] for key in veto['claim_ids'] if key in available]
                 if not linked or any(claim.source_verified is not True or claim.conflict for claim in linked):
                     raise ValueError('risk veto lacks verified source for each scoped option')
+            if self.review_repository is None:
+                raise ValueError('server risk review repository not connected')
+            self.review_repository.validate(veto.get('review_id'),batch_id=record['_verified_batch_id'],
+                                            batch=batch,kind='risk',scope=scope,at=at)
             vetoed.update(scope)
         return vetoed
 
@@ -352,7 +357,7 @@ CREATE TRIGGER IF NOT EXISTS agent_input_no_delete BEFORE DELETE ON agent_input_
                 or not stamp(batch['as_of'])<=stamp(record['completed_at'])<=at):
             raise ValueError('missing/mismatched frozen Codex execution')
         self._input_binding(record,batch_id,batch)
-        vetoed=self._risk_vetoes(record,batch,at)
+        vetoed=self._risk_vetoes(dict(record,_verified_batch_id=batch_id),batch,at)
         candidate=self.build(batch_id,candidate_id,_vetoed_options=vetoed)
         comparisons=record.get('option_comparisons',{})
         for option in candidate['options']:
@@ -367,10 +372,13 @@ CREATE TRIGGER IF NOT EXISTS agent_input_no_delete BEFORE DELETE ON agent_input_
             alternatives=[batch['options'][key] for key in comparison['alternative_option_ids']]
             if any(alt['identity']!=option['identity'] for alt in alternatives):
                 raise ValueError('comparison alternative identity mismatch')
-            # Narrow-play benchmark comparison remains fail-closed unless the
-            # server record supplies the independently validated full comparison.
-            if comparison.get('server_comparison_verified') is not True:
-                raise ValueError('unverified same-match comparison')
+            if self.review_repository is None:
+                raise ValueError('server comparison repository not connected')
+            reviewed=self.review_repository.validate(comparison.get('review_id'),batch_id=batch_id,
+                        batch=batch,kind='comparison',scope=[option['option_id']],at=at)
+            expected_alternatives=set(reviewed['computed'][option['option_id']]['alternatives'])
+            if set(comparison['alternative_option_ids'])!=expected_alternatives:
+                raise ValueError('comparison omitted server alternative universe')
         ranking=candidate['market_ranking']
         if ranking[0]!=candidate_id:
             raise ValueError('higher feasible candidate remains without valid sourced veto')

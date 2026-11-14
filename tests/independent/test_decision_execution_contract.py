@@ -6,6 +6,7 @@ import pytest
 from test_pair_policy_contract import batch, setup, ADMIN, REVIEWER, AT
 from sports_app.evidence import Claim, WEIGHTS
 from sports_app.publication import fingerprint
+from independent_decision_review_fixture import attach_reviews
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +28,8 @@ def universe():
     for market in value['markets'].values():market['outcomes']['D']='8'
     value['candidates']['second']=dict(option_ids=['o1alt','o2alt'],period='early_middle',equal_stake='1',total_investment='1')
     for key in ('o1alt','o2alt'):value['options'][key]['original_odds']='8'
-    return value
+    from independent_decision_review_fixture import add_coverage
+    return add_coverage(value)
 
 
 def bind_input(policy, record):
@@ -63,6 +65,7 @@ def test_candidate_build_never_authorizes_default_final_gate(setup):
 def test_synthetic_record_positive_control_preserves_benchmark(setup):
     _,policy=setup;value=universe();policy.freeze_batch(ADMIN,'a','batch',value)
     candidate=policy.build('batch','pair');record=execution(policy,value)
+    record=attach_reviews(policy,record)
     policy.decision_loader=lambda key:deepcopy(record)
     final=policy.final_snapshot('batch','pair','execution')
     assert policy(final)
@@ -99,6 +102,11 @@ def test_incomplete_or_mismatched_execution_refused(setup,mutation):
         record['input_hash']=policy.freeze_agent_input(ADMIN,'a',input_id=record['input_id'],
             batch_id='other-batch',assembled_input={'synthetic':'wrong batch control'})
     else:record['completed_at']=(AT+timedelta(seconds=1)).isoformat()
+    record=attach_reviews(policy,record)
+    if mutation=='unverified_comparison':
+        # A legacy boolean cannot authorize when the actual server review is absent.
+        record['option_comparisons']['o1'].pop('review_id',None)
+        record['option_comparisons']['o1']['server_comparison_verified']=True
     policy.decision_loader=lambda key:deepcopy(record)
     with pytest.raises((ValueError,KeyError)):policy.final_snapshot('batch','pair','execution')
 
@@ -123,6 +131,7 @@ def test_second_rank_requires_repository_sourced_veto_and_keeps_market_values(se
         repo.ingest(ADMIN,'a',claim)
         repo.verify(REVIEWER,'r',receipt_id='risk-receipt',claim_id='risk',
                     quote_hash=sha256(claim.quote.encode()).hexdigest(),conclusion='verified')
+    record=attach_reviews(policy,record)
     policy.decision_loader=lambda key:deepcopy(record)
     if mode=='verified':
         final=policy.final_snapshot('batch','second','execution')
@@ -138,6 +147,7 @@ def test_nonempty_unbound_input_hash_must_not_certify_final_decision(setup):
     # Deliberately red until execution input is checked against actual frozen input storage.
     _,policy=setup;value=universe();policy.freeze_batch(ADMIN,'a','batch',value)
     record=execution(policy,value);record['input_hash']='different-nonempty-input'
+    record=attach_reviews(policy,record)
     policy.decision_loader=lambda key:deepcopy(record)
     with pytest.raises(ValueError):policy.final_snapshot('batch','pair','execution')
 
@@ -192,6 +202,7 @@ def test_qualified_veto_rebuilds_conditional_pool_without_forging_scores(setup,h
     if has_veto:
         seed_option_risk(repo)
         record['candidate_vetoes']={'pair':dict(reason='risk applies to o1',claim_ids=['option-risk'],option_ids=['o1'])}
+    record=attach_reviews(policy,record)
     policy.decision_loader=lambda key:deepcopy(record)
     if not has_veto:
         with pytest.raises(ValueError):policy.final_snapshot('batch','second','execution')
@@ -213,5 +224,6 @@ def test_vetoed_option_cannot_reenter_via_new_partner_candidate(setup):
     seed_option_risk(repo)
     record=deferred_execution(policy,value,'reuse')
     record['candidate_vetoes']={'pair':dict(reason='risk applies to o1',claim_ids=['option-risk'],option_ids=['o1'])}
+    record=attach_reviews(policy,record)
     policy.decision_loader=lambda key:deepcopy(record)
     with pytest.raises(ValueError):policy.final_snapshot('batch','reuse','execution')
