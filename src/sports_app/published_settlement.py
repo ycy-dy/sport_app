@@ -74,7 +74,7 @@ class PublishedSettlementService:
         with closing(store.connect()) as db, db:
             db.executescript(SCHEMA)
 
-    def record(self, principal, csrf, *, publication_id, results, correction_reason=''):
+    def record(self, principal, csrf, *, publication_id, results, correction_reason='', mode=None):
         require(principal, {'admin'}, csrf)
         # Canonical order makes equivalent mapping replay deterministic.
         if not isinstance(results, dict):
@@ -94,11 +94,14 @@ class PublishedSettlementService:
             result_json = canonical({key: asdict(value) for key,value in sorted(results.items())})
             previous = db.execute('SELECT * FROM published_settlement_versions WHERE publication_id=? '
                                   'ORDER BY version DESC LIMIT 1', (publication_id,)).fetchone()
+            if mode not in (None,'initial','correction'):raise ValueError('invalid settlement mode')
+            if mode=='correction' and previous is None:raise ValueError('correction requires existing version')
             if previous:
                 if previous['original_hash'] != original_hash:
                     raise ValueError('published original changed')
                 if previous['result_json'] == result_json:
                     return dict(json.loads(previous['summary_json']), version=previous['version'])
+                if mode=='initial':raise ValueError('initial settlement cannot change existing result')
                 if not isinstance(correction_reason,str) or not correction_reason.strip():
                     raise ValueError('changed result requires correction reason')
             option_results, leg_results = {}, []
