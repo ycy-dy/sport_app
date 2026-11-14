@@ -72,8 +72,19 @@ def test_conflict_writer_cannot_commit_between_gate_read_and_publication_commit(
                 dimensions=[(f'{i:02d}', 'verified') for i in range(1, 24)],
                 reasons=['r1', 'r2'], failure_paths=['f1', 'f2'], withdraw_if=['w'],
                 claim_ids=['c1', 'c2'])
-    snapshot = dict(slot_key='synthetic-slot', selection_hash='selection',
-                    manifest_hash='manifest', model_probability=None, EV=None, options=[item])
+    from independent_ticket_fixture import research_snapshot
+    snapshot = research_snapshot('synthetic-slot')
+    snapshot['options'][0].update(item)
+    # Both independent legs need repository evidence before review can qualify.
+    from dataclasses import replace
+    for index in (1, 2):
+        second_claim = replace(claim, claim_id=f'other-c{index}', option_id='o2',
+                               group_id=f'other-group-{index}', quote=f'other synthetic quote {index}')
+        repository.ingest(ADMIN, ADMIN.csrf_token, second_claim)
+        repository.verify(REVIEWER, REVIEWER.csrf_token, receipt_id=f'other-r{index}',
+                          claim_id=second_claim.claim_id,
+                          quote_hash=sha256(second_claim.quote.encode()).hexdigest(), conclusion='verified')
+    snapshot['options'][1]['claim_ids'] = ['other-c1', 'other-c2']
     base_gate = RepositoryReviewGate(repository, additional_gate=lambda body: True)
     service = PublicationService(store, trusted_gate=base_gate)
     for draft, review in [('d1', 'review1'), ('d2', 'review2')]:

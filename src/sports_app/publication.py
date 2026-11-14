@@ -36,6 +36,8 @@ class PublicationService:
         for key in ("slot_key", "selection_hash", "manifest_hash"):
             if not isinstance(snapshot.get(key), str) or not snapshot[key].strip():
                 raise ValueError("missing snapshot field: " + key)
+        from .publication_ticket import validate_snapshot
+        validate_snapshot(snapshot)
         if self._gate is None:
             raise PermissionError("trusted policy gate not connected")
         # Pass a detached copy: a gate cannot mutate the reviewed original.
@@ -46,6 +48,8 @@ class PublicationService:
         require(principal, {"admin"}, csrf)
         if not isinstance(draft_id, str) or not draft_id.strip():
             raise ValueError("empty draft id")
+        from .publication_ticket import prepare_snapshot
+        snapshot = prepare_snapshot(snapshot)
         serialized = canonical(snapshot)
         digest = fingerprint(snapshot)
         with closing(self.store.connect()) as db, db:

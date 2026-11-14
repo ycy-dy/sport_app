@@ -150,8 +150,18 @@ class PublishedSettlementService:
                            'legs':[{'leg_id':leg['leg_id'],'outcome':'pending'}
                                    for leg in original.get('settlement_ticket',{}).get('legs',[])],
                            'actual_stake':None,'actual_return':None}
-            answer.append(dict(summary,version=row['version'],publication_status=row['status']))
+            original = json.loads(row['original_json'])
+            try:
+                frozen_ticket(original)
+                coverage = 'complete'
+            except (KeyError, ValueError, TypeError):
+                coverage = 'insufficient_frozen_structure'
+            answer.append(dict(summary,version=row['version'],publication_status=row['status'],
+                               leg_statistics_coverage=coverage))
         return answer
 
     def statistics(self):
-        return statistics(self.ledger())
+        ledger = self.ledger()
+        missing = sum(row['leg_statistics_coverage'] != 'complete' for row in ledger)
+        return dict(statistics(ledger), leg_statistics_coverage='incomplete' if missing else 'complete',
+                    tickets_missing_leg_structure=missing)

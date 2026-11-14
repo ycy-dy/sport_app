@@ -7,6 +7,7 @@ import pytest
 from sports_app.auth import Principal, require
 from sports_app.storage import SQLiteStore
 from sports_app.publication import PublicationService
+from ticket_fixture import synthetic_ticket_input
 
 ADMIN = Principal("synthetic-admin", "admin", "test-csrf")
 REVIEWER = Principal("synthetic-reviewer", "reviewer", "review-csrf")
@@ -26,6 +27,9 @@ def prepare(service, draft="d1", review="r1", selection="s1", slot="synthetic-sl
     snapshot = {"slot_key": slot, "selection_hash": selection,
                 "manifest_hash": "synthetic-manifest", "model_probability": None,
                 "EV": None}
+    from sports_app.publication_ticket import prepare_snapshot
+    snapshot.update(synthetic_ticket_input())
+    snapshot = prepare_snapshot(snapshot)
     service.save_draft(ADMIN, ADMIN.csrf_token, draft, snapshot)
     service.review(REVIEWER, REVIEWER.csrf_token, draft, review)
     return snapshot

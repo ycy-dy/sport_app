@@ -32,8 +32,8 @@ def service(tmp_path):
 
 
 def snapshot(slot='slot-1'):
-    return dict(slot_key=slot, selection_hash='synthetic-selection',
-                manifest_hash='synthetic-manifest', model_probability=None, EV=None)
+    from independent_ticket_fixture import research_snapshot
+    return research_snapshot(slot)
 
 
 def prepare(svc, draft='d1', review='r1', slot='slot-1'):
@@ -59,7 +59,13 @@ def test_admin_can_save_reviewer_can_review_control(service):
     store, svc = service
     prepare(svc)
     assert confirm(svc) == 'p1'
-    assert len(records(store, 'publications')) == 1
+    published = records(store, 'publications')
+    assert len(published) == 1
+    import json
+    frozen = json.loads(published[0]['original_json'])['settlement_ticket']
+    assert len(frozen['legs']) == 2 and len(frozen['branches']) == 1
+    assert frozen['branches'][0]['option_ids'] == ['o1', 'o2']
+    assert frozen['total_investment'] == '1'
 
 
 def test_reviewer_cannot_create_draft(service):

@@ -40,10 +40,13 @@ def setup():
 
 def publish(service, ident='p1', snapshot=None):
     snapshot=original() if snapshot is None else snapshot
-    service.save_draft(ADMIN,'csrf',ident,snapshot)
-    service.review(REVIEWER,'rcsrf',ident,'r'+ident)
-    service.confirm(ADMIN,'csrf',draft_id=ident,review_id='r'+ident,publication_id=ident,
-                    request_id='req'+ident,human_confirmed=True)
+    # Explicit legacy fixture: bypass NEW publication service only to test old
+    # immutable records (including unsupported historical markets).
+    from sports_app.publication import canonical
+    with closing(service.store.connect()) as db, db:
+        db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?,?)',
+                   (ident,snapshot['slot_key'],snapshot['selection_hash'],snapshot['manifest_hash'],
+                    'published',canonical(snapshot),'synthetic-time'))
     return snapshot
 
 

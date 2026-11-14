@@ -38,9 +38,15 @@ def original():
         options=[dict(option_id=f'o{i}{s}',market='HHAD',selection=s,line='-1',original_odds='4')
                  for s in (('H','D') if i==1 else ('H',))]
         legs.append(dict(leg_id=f'l{i}',identity=asdict(identity),scope='regulation_90',options=options))
+    # Sort explicitly, independent of the implementation's generator.
+    legs[0]['options'].sort(key=lambda option: option['option_id'])
+    options = [dict(option, leg_id=leg['leg_id'], identity=dict(leg['identity']),
+                    scope=leg['scope'], assessment_id='assessment-'+option['option_id'])
+               for leg in legs for option in leg['options']]
     return dict(slot_key='synthetic-slot',selection_hash='synthetic-selection',manifest_hash='synthetic-manifest',
-                recommendation_status='conditional_low_confidence',settlement_ticket=dict(legs=legs,
-                    equal_stake='1',total_investment='2',branches=[dict(branch_id=f'b{s}',option_ids=[f'o1{s}','o2H']) for s in ('H','D')]))
+                recommendation_status='conditional_low_confidence', options=options,
+                equal_stake='1', total_investment='2', settlement_ticket=dict(legs=legs,
+                    equal_stake='1',total_investment='2',branches=[dict(branch_id=f'branch-{i}',option_ids=[f'o1{s}','o2H']) for i,s in enumerate(('D','H'))]))
 
 
 def publish(pub, body, ident='p1', replace_id=None):
@@ -89,17 +95,26 @@ def test_invalid_frozen_universe_never_writes_settlement(setup,mutation):
     elif mutation=='duplicate_pair': ticket['branches'][1]['option_ids']=ticket['branches'][0]['option_ids'][:]
     elif mutation=='wrong_total': ticket['total_investment']='1'
     else: del ticket['legs'][0]['options'][0]['original_odds']
-    publish(pub,body)
+    insert_historical(store,body)
     with pytest.raises((ValueError,KeyError)):
         svc.record(ADMIN,'csrf',publication_id='p1',results={})
     assert version_count(store)==0
 
 
+def insert_historical(store, body, ident='p1'):
+    # Simulate an existing legacy publication, never bypass new-publication validation.
+    with closing(store.connect()) as db, db:
+        db.execute('INSERT INTO publications VALUES(?,?,?,?,?,?,?)',
+                   (ident, body['slot_key'], body['selection_hash'], body['manifest_hash'],
+                    'published', canonical(body), 'synthetic-historical-time'))
+
+
 def test_one_miss_one_pending_option_keeps_union_pending(setup):
-    _,pub,svc=setup
+    store,pub,svc=setup
     body=original()
-    body['settlement_ticket']['legs'][0]['options'][1]['market']='HAFU'
-    publish(pub,body)
+    next(option for option in body['settlement_ticket']['legs'][0]['options']
+         if option['option_id']=='o1D')['market']='HAFU'
+    insert_historical(store,body)
     summary=svc.record(ADMIN,'csrf',publication_id='p1',results={
         'l1':result(body,0,(0,1)),'l2':result(body,1,(3,0))})
     assert summary['options']['o1H']['outcome']=='miss'
@@ -140,3 +155,18 @@ def test_history_universe_correction_and_replay_count_once(setup):
     stats=svc.statistics()
     assert stats['actual_recommendations']==3 and stats['settled_denominator']==1
     assert stats['miss']==1 and stats['pending']==2
+
+
+def test_legacy_missing_ticket_reports_incomplete_coverage(setup):
+    store,_,svc=setup
+    body=dict(slot_key='legacy-slot',selection_hash='legacy-selection',manifest_hash='legacy-manifest',
+              recommendation_status='conditional_low_confidence')
+    insert_historical(store,body,'legacy')
+    row=svc.ledger()[0]
+    assert row['outcome']=='pending'
+    assert row['leg_statistics_coverage']=='insufficient_frozen_structure'
+    assert row['legs']==[]  # Do not invent missing historical legs.
+    stats=svc.statistics()
+    assert stats['actual_recommendations']==1 and stats['pending']==1
+    assert stats['leg_statistics_coverage']=='incomplete'
+    assert stats['tickets_missing_leg_structure']==1
