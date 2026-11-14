@@ -43,7 +43,7 @@ def generate_ticket(snapshot):
         from .football_markets import validate_football_selection, HAFU
         allowed = {'football': {'HAD': {'H','D','A'}, 'HHAD': {'H','D','A'},
                                 'TTG':{str(i) for i in range(7)} | {'7+'},
-                                'HAFU': HAFU, 'CRS': {option['selection']}}, 
+                                'HAFU': HAFU, 'CRS': {option['selection']}},
                    'basketball': {'MNL': {'H','A'}, 'HDC': {'H','A'}, 'HILO': {'O','U'}}}
         if sport not in allowed or market not in allowed[sport] or option['selection'] not in allowed[sport][market]:
             raise ValueError('unsupported deterministic settlement market or selection')

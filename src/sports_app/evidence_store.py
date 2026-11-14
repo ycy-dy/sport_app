@@ -155,8 +155,14 @@ class RepositoryReviewGate:
             conditional = self.repository.conditional_scope(snapshot)
         except (ValueError, TypeError):
             return False
-        if conditional and (len(options) != 2 or len({item.get('option_id') for item in options}) != 2):
-            return False
+        if conditional:
+            # Legacy two-option controls remain valid; complete composed tickets
+            # identify two legs explicitly and may contain >2 independently scored options.
+            leg_ids = {item.get('leg_id') for item in options}
+            if (len({item.get('option_id') for item in options}) != len(options)
+                    or (leg_ids == {None} and len(options) != 2)
+                    or (leg_ids != {None} and (None in leg_ids or len(leg_ids) != 2))):
+                return False
         as_of = self.repository.clock()  # actual server decision time, not client backdating
         for item in options:
             if any(key in item for key in ('claims', 'receipts', 'evidence_context', 'eligible', 'evidence_score')):
