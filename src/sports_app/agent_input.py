@@ -15,6 +15,42 @@ IDENTITY_FIELDS = ('sport', 'league', 'business_day', 'match_id', 'kickoff',
                    'source_as_of')
 
 
+def validate_event_binding(option):
+    from .core import _decimal
+    event = option['event_definition']
+    no_line = {'HAD','MNL','TTG','HAFU','CRS'}
+    needs_line = {'HHAD','HDC','HILO'}
+    market = event['market']
+    if market in no_line:
+        if event['line'] is not None:
+            raise ValueError('non-handicap market line must be explicit null')
+    elif market in needs_line:
+        if isinstance(event['line'],bool) or event['line'] is None:
+            raise ValueError('market requires finite line')
+        number = _decimal(event['line'])
+        if market == 'HHAD' and number != number.to_integral_value():
+            raise ValueError('HHAD requires integer line')
+    else:
+        raise ValueError('unknown market line contract')
+    if option['market'] != market or option['line'] != event['line']:
+        raise ValueError('event market/line differs from frozen option')
+    identity = option['identity']
+    for key in ('sport','league','business_day','match_id','kickoff'):
+        if event[key] != identity[key]:
+            raise ValueError('event identity differs from option: '+key)
+    if event['home_team'] != identity['home_id'] or event['away_team'] != identity['away_id']:
+        raise ValueError('event teams differ from frozen stable identities')
+    if option['scope'] != option['settlement_scope']:
+        raise ValueError('event settlement scope differs from option')
+    expected_scope = 'regulation_90' if identity['sport']=='football' else 'including_ot' if identity['sport']=='basketball' else None
+    if (expected_scope is None or option['scope'] != expected_scope
+            or (identity['sport']=='football' and market not in {'HAD','HHAD','TTG','HAFU','CRS'})
+            or (identity['sport']=='basketball' and market not in {'MNL','HDC','HILO'})):
+        raise ValueError('invalid sport/market/scope')
+    if _decimal(event['original_odds']) != _decimal(option['original_odds']):
+        raise ValueError('event price differs from option')
+
+
 def build_agent_input(*, options, candidates, exclusions, runtime_manifest, rule_documents):
     """Embed ALL five exact rule texts, including the complete 039 contract.
 
@@ -39,8 +75,9 @@ def build_agent_input(*, options, candidates, exclusions, runtime_manifest, rule
         if any(key not in option or option[key] in (None, '', []) for key in REQUIRED_OPTION_FIELDS):
             raise ValueError('incomplete 039 option')
         event = option['event_definition']
-        if not isinstance(event, dict) or any(key not in event or event[key] in (None, '') for key in IDENTITY_FIELDS):
+        if not isinstance(event, dict) or any(key not in event or (key != 'line' and event[key] in (None, '')) for key in IDENTITY_FIELDS):
             raise ValueError('incomplete event identity')
+        validate_event_binding(option)
         for key in ('evidence_as_of',):
             stamp = datetime.fromisoformat(option[key])
             if stamp.tzinfo is None:

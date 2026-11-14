@@ -42,8 +42,9 @@ def instant(value):
 
 
 class ManualRuntime:
-    def __init__(self,policy,*,executor=None,clock=None):
+    def __init__(self,policy,*,executor=None,clock=None,assembly=None):
         self.policy=policy;self.store=policy.store;self._executor=executor
+        self.assembly=assembly
         self.clock=clock or (lambda:datetime.now(timezone.utc))
         with closing(self.store.connect()) as db,db:db.executescript(SCHEMA)
 
@@ -62,6 +63,7 @@ class ManualRuntime:
     def create(self,principal,csrf,*,task_id,input_id,registry_id,batch_id,deadline):
         require(principal,{'admin'},csrf)
         if self._executor is None:raise ValueError('NOT_IMPLEMENTED: executor unconfigured')
+        if self.assembly is not None:self.assembly.assert_approved()
         if not all(isinstance(v,str) and v.strip() for v in (task_id,input_id,registry_id)):
             raise ValueError('empty task identity')
         if instant(deadline)<=self.clock():raise ValueError('expired task')
@@ -99,6 +101,7 @@ class ManualRuntime:
     def execute(self,principal,csrf,task_id):
         require(principal,{'admin'},csrf)
         if self._executor is None:raise ValueError('NOT_IMPLEMENTED: executor unconfigured')
+        if self.assembly is not None:self.assembly.assert_approved()
         with closing(self.store.connect()) as db,db:
             db.execute('BEGIN IMMEDIATE')
             task=db.execute('SELECT * FROM manual_tasks WHERE task_id=?',(task_id,)).fetchone()
@@ -110,6 +113,18 @@ class ManualRuntime:
             source=db.execute('SELECT * FROM agent_input_records WHERE input_id=?',(task['input_id'],)).fetchone()
             body=json.loads(source['body'])
             if fingerprint(body)!=source['digest']:raise ValueError('input corruption')
+            registry=db.execute('SELECT * FROM approved_rules WHERE registry_id=?',(task['registry_id'],)).fetchone()
+            if registry is None:raise ValueError('task rule registry missing')
+            rules=json.loads(registry['body'])
+            assembled=body['assembled_input']
+            payload_input=assembled['input']
+            if (fingerprint(rules)!=registry['digest'] or fingerprint(payload_input)!=assembled['input_hash']
+                    or payload_input['runtime_manifest']!=rules['manifest']
+                    or payload_input['rule_documents']!=rules['documents']
+                    or body['batch']['manifest']!=rules['manifest']
+                    or {o['option_id']:o for o in payload_input['options']}!=body['batch']['options']
+                    or payload_input['candidates']!=body['batch']['candidates']):
+                raise ValueError('task input/rules/batch mismatch')
             self._transition(db,task_id,state['version']+1,'running',{})
         try:
             response=self._executor(deepcopy(body))

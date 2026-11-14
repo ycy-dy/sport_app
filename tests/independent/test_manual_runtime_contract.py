@@ -29,7 +29,13 @@ def prepare(setup,executor):
     policy.approved_manifest=deepcopy(value['manifest'])
     for option in value['options'].values():
         for key in REQUIRED_OPTION_FIELDS:option.setdefault(key,'synthetic research content')
-        option['event_definition']={key:'synthetic event field' for key in IDENTITY_FIELDS}
+        identity=option['identity']
+        option['event_definition']=dict(
+            **{key:identity[key] for key in ('sport','league','business_day','match_id','kickoff')},
+            home_team=identity['home_id'],away_team=identity['away_id'],
+            market=option['market'],line=option['line'],original_odds=option['original_odds'],
+            source_as_of=AT.isoformat())
+        option['settlement_scope']=option['scope']
         option['evidence_as_of']=AT.isoformat()
     policy.freeze_batch(ADMIN,'a','batch',value)
     runtime=ManualRuntime(policy,executor=executor,clock=lambda:AT)

@@ -18,7 +18,12 @@ def prepare(policy,evidence,executor):
     for option in value['options'].values():
         for key in REQUIRED_OPTION_FIELDS:
             option.setdefault(key,'synthetic research')
-        option['event_definition']={key:'synthetic' for key in IDENTITY_FIELDS}
+        identity=option['identity']
+        option['event_definition']=dict(sport=identity['sport'],league=identity['league'],
+            business_day=identity['business_day'],match_id=identity['match_id'],kickoff=identity['kickoff'],
+            home_team=identity['home_id'],away_team=identity['away_id'],market=option['market'],line=None,
+            original_odds=option['original_odds'],source_as_of=AT.isoformat())
+        option['settlement_scope']=option['scope']
         option['evidence_as_of']=AT.isoformat()
     policy.freeze_batch(ADMIN,'a','b',value)
     runtime=ManualRuntime(policy,executor=executor,clock=lambda:AT)
