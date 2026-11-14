@@ -280,7 +280,7 @@ CREATE TRIGGER IF NOT EXISTS agent_input_no_delete BEFORE DELETE ON agent_input_
         except (ValueError,KeyError,TypeError):
             return False
 
-    def freeze_agent_input(self,principal,csrf,*,input_id,batch_id,assembled_input):
+    def freeze_agent_input(self,principal,csrf,*,input_id,batch_id,assembled_input,transaction=None):
         require(principal,{'admin'},csrf)
         batch,at=self._load(batch_id)
         if not text(input_id) or not isinstance(assembled_input,dict):
@@ -289,10 +289,15 @@ CREATE TRIGGER IF NOT EXISTS agent_input_no_delete BEFORE DELETE ON agent_input_
         # input_hash is computed here, never accepted as an authentication flag.
         body={'assembled_input':assembled_input,'batch':batch}
         digest=fingerprint(body)
-        with closing(self.store.connect()) as db, db:
-            db.execute('INSERT INTO agent_input_records VALUES(?,?,?,?,?,?,?,?)',
-                       (input_id,canonical(body),digest,batch_id,fingerprint(batch),
-                        fingerprint(batch['manifest']),principal.actor_id,at.isoformat()))
+        values=(input_id,canonical(body),digest,batch_id,fingerprint(batch),
+                fingerprint(batch['manifest']),principal.actor_id,at.isoformat())
+        if transaction is not None:
+            if not transaction.in_transaction:
+                raise ValueError('active caller transaction required')
+            transaction.execute('INSERT INTO agent_input_records VALUES(?,?,?,?,?,?,?,?)',values)
+        else:
+            with closing(self.store.connect()) as db, db:
+                db.execute('INSERT INTO agent_input_records VALUES(?,?,?,?,?,?,?,?)',values)
         return digest
 
     def _input_binding(self,record,batch_id,batch):
