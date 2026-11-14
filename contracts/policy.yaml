@@ -1,0 +1,27 @@
+schema_version: '1.0'
+policy_revision: '2026-11-09-required-pairs-01'
+analysis_revision: '2026-11-13-history-methods-01'
+scoring_revision: 'evidence-policy-1.0.0'
+timezone: Asia/Shanghai
+runtime_provider: codex
+provider_allowlist: [codex]
+evidence_threshold: 70
+football_minimum_option_odds: '1.33'
+branch_effective_multiple: 'strictly_greater_than_2.5'
+conditional_scope: regular_pair_only
+model_probability: null
+EV: null
+manual_publication_confirmation: true
+automatic_notifications: false
+execute_bet: false
+required_analysis_fields:
+  - event_definition
+  - settlement_scope
+  - evidence_as_of
+  - strongest_counterevidence
+  - covered_paths
+  - excluded_paths
+  - failure_paths
+  - withdraw_if
+  - market_benchmark_method
+  - selection_comparison
