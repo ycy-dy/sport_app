@@ -60,7 +60,7 @@ class ManualRuntime:
         with closing(self.store.connect()) as db,db:
             db.execute('INSERT INTO approved_rules VALUES(?,?,?,?)',(registry_id,canonical(body),fingerprint(body),principal.actor_id))
 
-    def create(self,principal,csrf,*,task_id,input_id,registry_id,batch_id,deadline):
+    def create(self,principal,csrf,*,task_id,input_id,registry_id,batch_id,deadline,http_request=None):
         require(principal,{'admin'},csrf)
         if self._executor is None:raise ValueError('NOT_IMPLEMENTED: executor unconfigured')
         if self.assembly is not None:self.assembly.assert_approved()
@@ -83,6 +83,9 @@ class ManualRuntime:
                                            assembled_input=assembled,transaction=db)
             db.execute('INSERT INTO manual_tasks VALUES(?,?,?,?,?)',(task_id,input_id,registry_id,deadline,principal.actor_id))
             self._transition(db,task_id,1,'created',{})
+            if http_request is not None:
+                db.execute('INSERT INTO task_http_requests VALUES(?,?,?)',
+                           (http_request[0],http_request[1],task_id))
         return task_id
 
     def _transition(self,db,task_id,version,state,payload):

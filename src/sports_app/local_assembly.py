@@ -20,9 +20,9 @@ RULE_PATHS = {
 CODE_FILES = ('__init__.py','app.py','auth.py','core.py','evidence.py','evidence_store.py',
               'manifest.py','agent_input.py','publication.py','publication_ticket.py',
               'football_markets.py','settlement.py','published_settlement.py','pair_policy.py',
-              'storage.py','task_runtime.py','local_assembly.py','decision_review.py')
+              'storage.py','task_runtime.py','local_assembly.py','decision_review.py','task_http.py')
 SCHEMA_FILES = ('storage.py','evidence_store.py','published_settlement.py','settlement.py',
-                'pair_policy.py','task_runtime.py','decision_review.py')
+                'pair_policy.py','task_runtime.py','decision_review.py','task_http.py')
 
 
 def read_explicit(root, relative):

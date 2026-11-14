@@ -3,7 +3,7 @@ from flask import Flask, g, jsonify, request
 from .auth import require
 
 
-def create_app(*, data_dir: str, principal_loader) -> Flask:
+def create_app(*, data_dir: str, principal_loader, task_runtime=None) -> Flask:
     app = Flask(__name__)
     app.config.update(DATA_DIR=data_dir, PRINCIPAL_LOADER=principal_loader)
 
@@ -18,13 +18,8 @@ def create_app(*, data_dir: str, principal_loader) -> Flask:
     def healthz():
         return {"ok": True}
 
-    @app.post("/api/analysis-runs")
-    def start_analysis():
-        try:
-            require(g.principal, {"admin"}, request.headers.get("X-CSRF"))
-        except PermissionError as exc:
-            return jsonify(category="HARD_BLOCK", code="FORBIDDEN", message=str(exc)), 403
-        return jsonify(category="EXECUTION_FAILURE", code="NOT_IMPLEMENTED", message="手动分析任务尚未接线"), 501
+    from .task_http import register_task_http
+    register_task_http(app, task_runtime)
 
     @app.post("/api/publications/<draft_id>/confirm")
     def confirm(draft_id: str):
