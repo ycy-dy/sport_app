@@ -5,10 +5,24 @@ import sqlite3
 FOOT_ROOT = Path("/Users/ycy/ycy/foot").resolve()
 
 
+def reject_link_chain(value):
+    """Inspect lexical ancestors before resolve or any filesystem mutation."""
+    import stat
+    path=Path(value).absolute()
+    if '..' in path.parts:raise ValueError('parent traversal not allowed')
+    for candidate in (path,*path.parents):
+        try:info=candidate.lstat()
+        except FileNotFoundError:continue
+        if stat.S_ISLNK(info.st_mode):raise ValueError('symlink entry not allowed')
+    return path
+
+
 def safe_data_dir(data_dir: str | Path, *, app_root: str | Path) -> Path:
     """Allow only an explicit app-owned data subtree; reject foot and escapes."""
-    root = Path(app_root).resolve()
-    path = Path(data_dir).resolve()
+    raw_root=reject_link_chain(app_root)
+    raw_path=reject_link_chain(data_dir)
+    root = raw_root.resolve()
+    path = raw_path.resolve()
     if path == FOOT_ROOT or FOOT_ROOT in path.parents:
         raise ValueError("存储目录不得指向原项目或其子目录")
     if path != root and root not in path.parents:
@@ -55,8 +69,12 @@ CREATE TRIGGER IF NOT EXISTS review_no_delete BEFORE DELETE ON publication_revie
 class SQLiteStore:
     def __init__(self, data_dir: str | Path, *, app_root: str | Path):
         self.data_dir = safe_data_dir(data_dir, app_root=app_root)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = self.data_dir / "app.sqlite3"
+        if not self.path.exists():
+            import os
+            fd=os.open(self.path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|getattr(os,'O_NOFOLLOW',0),0o600)
+            os.close(fd)
         with self.connect() as db:
             existing = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='publications'").fetchone()
             if existing and 'unique(slot_key,status)' in ''.join(existing[0].lower().split()):
