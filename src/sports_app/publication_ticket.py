@@ -40,10 +40,15 @@ def generate_ticket(snapshot):
             raise ValueError('invalid kickoff or teams')
         sport, market = identity['sport'], option['market']
         scope = option['scope']
-        allowed = {'football': {'HAD': {'H','D','A'}, 'HHAD': {'H','D','A'}},
+        from .football_markets import validate_football_selection, HAFU
+        allowed = {'football': {'HAD': {'H','D','A'}, 'HHAD': {'H','D','A'},
+                                'TTG':{str(i) for i in range(7)} | {'7+'},
+                                'HAFU': HAFU, 'CRS': {option['selection']}}, 
                    'basketball': {'MNL': {'H','A'}, 'HDC': {'H','A'}, 'HILO': {'O','U'}}}
         if sport not in allowed or market not in allowed[sport] or option['selection'] not in allowed[sport][market]:
             raise ValueError('unsupported deterministic settlement market or selection')
+        if sport == 'football':
+            validate_football_selection(market, option['selection'], option.get('market_contract'))
         if scope != ('regulation_90' if sport == 'football' else 'including_ot'):
             raise ValueError('unsupported settlement scope')
         odds = _decimal(option['original_odds'])
@@ -58,6 +63,8 @@ def generate_ticket(snapshot):
             raise ValueError('unexpected line for straight result market')
         record = {'option_id':ident,'market':market,'selection':option['selection'],
                   'line':line,'original_odds':option['original_odds']}
+        if option.get('market_contract') is not None:
+            record['market_contract'] = deepcopy(option['market_contract'])
         if leg_id not in grouped:
             grouped[leg_id] = {'leg_id':leg_id,'identity':deepcopy(identity),'scope':scope,'options':[]}
         leg = grouped[leg_id]

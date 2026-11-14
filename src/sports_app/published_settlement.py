@@ -106,7 +106,7 @@ class PublishedSettlementService:
                 outcomes = []
                 for option_id, value in option_maps[i].items():
                     frozen = TicketLeg(option_id, identities[i], value['market'], value['selection'],
-                                       value['line'], leg['scope'])
+                                       value['line'], leg['scope'], value.get('market_contract'))
                     if leg['leg_id'] not in results:
                         outcome = 'pending'
                         detail = {'leg_id':option_id,'outcome':outcome,'reason':'no result', 'result_hash':None}

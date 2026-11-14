@@ -1,8 +1,8 @@
 """Offline deterministic settlement. Unknown/cancelled rules remain pending.
 
 Scores are integers, HDC uses the frozen HOME handicap. No network or actual
-money. This initial service supports HAD/HHAD and MNL/HDC/HILO only; unsupported
-markets fail pending rather than silently applying another market's rules.
+money. Supports HAD/HHAD/TTG/HAFU/CRS and MNL/HDC/HILO; missing half-time
+provenance or CRS complement contracts fail pending, never inferred.
 """
 from dataclasses import dataclass, asdict
 from decimal import Decimal, InvalidOperation
@@ -32,6 +32,7 @@ class TicketLeg:
     selection: str
     line: str | None
     scope: str  # football regulation_90; basketball including_ot
+    market_contract: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,12 @@ class ResultSnapshot:
     periods: tuple[tuple[int, int], ...] = ()  # first 4 quarters then each OT
     source_id: str = ''
     conflict: bool = False
+    half_scores: tuple[int, int] | None = None
+    half_identity: Identity | None = None
+    half_orientation: str | None = None
+    half_scope: str | None = None
+    half_source_id: str | None = None
+    half_conflict: bool = False
 
 
 @dataclass(frozen=True)
@@ -100,6 +107,30 @@ def settle_leg(leg, result):
             difference = Decimal(home-away)+line
             target = 'H' if difference > 0 else 'A' if difference < 0 else 'D'
             choices = {'H', 'D', 'A'}  # equality is handicap draw, never cancellation
+        elif leg.market in {'TTG','HAFU','CRS'} and identity.sport == 'football':
+            from .football_markets import validate_football_selection, exact_score
+            validate_football_selection(leg.market,leg.selection,leg.market_contract)
+            if leg.market == 'TTG':
+                target = '7+' if home+away >= 7 else str(home+away)
+            elif leg.market == 'HAFU':
+                if (result.half_identity != identity or result.half_orientation != result.orientation
+                        or result.half_scope != 'regulation_90' or result.half_conflict
+                        or not isinstance(result.half_source_id,str) or not result.half_source_id.strip()
+                        or not valid_pair(result.half_scores)):
+                    return decision('pending','missing/conflicting half-time identity, source, direction or scope')
+                ht_home,ht_away = result.half_scores if result.orientation == 'H:A' else result.half_scores[::-1]
+                if ht_home > home or ht_away > away:
+                    return decision('pending','half-time exceeds regulation final')
+                direction = lambda h,a: 'H' if h>a else 'A' if h<a else 'D'
+                target = direction(ht_home,ht_away)+direction(home,away)
+            elif leg.selection in {'H_OTHER','D_OTHER','A_OTHER'}:
+                listed = {exact_score(value) for value in leg.market_contract['listed_scores']}
+                if (home,away) in listed:
+                    return decision('miss','score belongs to listed exact category, not other complement')
+                target = ('H' if home>away else 'A' if home<away else 'D')+'_OTHER'
+            else:
+                target = f'{home}:{away}'
+            return decision('hit' if leg.selection == target else 'miss','frozen football event comparison')
         elif leg.market in {'MNL', 'HDC', 'HILO'} and identity.sport == 'basketball':
             if leg.market == 'MNL':
                 target, choices = ('H' if home > away else 'A'), {'H', 'A'}
