@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>赛事研究台 · 足球篮球内部研究</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script id="session-context" type="application/json">{{ session_context|tojson }}</script>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">跳转到主内容</a>
+<header class="topbar"><a class="brand" href="#schedules"><span class="brand-icon" aria-hidden="true">研</span><span>赛事研究台<small>SPORTS RESEARCH / INTERNAL</small></span></a><span id="role" class="badge">身份核验中</span></header>
+<div class="shell">
+  <aside><p class="eyebrow">研究工作区</p><nav aria-label="七栏目主导航" id="navigation">
+    <a href="#schedules">比赛赛程</a><a href="#analyses">今日分析</a><a href="#recommendations">今日推荐</a><a href="#ledger">推荐台账</a><a href="#reviews">复盘分析</a><a href="#analysis-system">分析体系</a><a href="#recommendation-system">推荐体系</a>
+  </nav><p class="sidebar-note">手动研究 · 人工确认<br>无投注、支付或下单功能<br>北京时间 / Asia/Shanghai</p></aside>
+  <main id="main" tabindex="-1">
+    <div class="page-heading"><div><p class="eyebrow">FOOTBALL & BASKETBALL</p><h1 id="page-title">比赛赛程</h1><p id="page-description">读取获准公开的赛程快照。</p></div><button id="refresh" type="button">刷新当前栏目</button></div>
+    <div class="notice">内部研究预览：真实来源、真实AI与生产尚未验收；不代表已获准发布真实推荐。证据分不是胜率，模型概率与EV未验收、不可用。</div>
+    <form id="filters" class="filters" aria-label="筛选当前栏目">
+      <label>运动<select name="sport"><option value="">全部运动</option><option value="football">足球</option><option value="basketball">篮球</option></select></label>
+      <label>业务日（北京时间）<input type="date" name="business_day"></label>
+      <label>状态<select name="status"><option value="">全部状态</option></select></label>
+      <label>每页<select name="limit"><option value="20">20 条</option><option value="50">50 条</option><option value="100">100 条</option></select></label>
+      <button type="submit" class="primary">应用筛选</button><button type="reset">重置</button>
+    </form>
+    <p id="feedback" role="status" aria-live="polite"></p>
+    <section id="snapshot" class="snapshot" aria-label="快照状态"></section>
+    <section id="results" aria-label="栏目内容" aria-busy="true"></section>
+    <div class="pagination" id="pagination"><button id="previous" type="button">上一页</button><span id="page-count"></span><button id="next" type="button">下一页</button></div>
+    <section id="detail" aria-label="原票与复盘详情" hidden></section>
+    <noscript><p class="notice">此界面需要JavaScript读取同源API；未加载数据不等于无赛事。</p></noscript>
+    <footer>研究展示，不承诺命中或收益。页面不计算证据分、发布资格或结算结果。</footer>
+  </main>
+</div>
+<dialog id="confirmation" aria-labelledby="confirm-title"><form method="dialog"><h2 id="confirm-title">确认复盘操作</h2><p id="confirm-description"></p><p>此操作只记录复盘请求或意见，不结算、不修改原票。意见正文提交后不向本页面公开。</p><div class="actions"><button value="cancel" autofocus>返回检查</button><button class="primary" value="confirm">确认提交</button></div></form></dialog>
+</body></html>
